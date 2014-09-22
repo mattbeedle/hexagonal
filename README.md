@@ -84,6 +84,70 @@ rails generate hexagonal:job [JOB_NAME]
 rails generate hexagonal:decorator [MODEL_NAME]
 ```
 
+## Structure
+
+### Runners (app/runners)
+These are my own creation. They are responsible for model materialization,
+authorization (authentication still happens in the controller) and running
+ parameter validation
+
+### Mediators (app/mediators)
+A [Mediator](http://en.wikipedia.org/wiki/Mediator_pattern) is a a design
+pattern encapsulating how a set of objects interact
+The mediators take care of saving/updating/deleting/etc and calling out
+to workers (for longer jobs, like looking up social media data)
+or jobs (for shorter jobs, like sending email)
+
+### Forms (app/forms)
+These contain parameter validation logic.
+
+### Decorators (app/decorators)
+These are used to add an object-oriented presentation layer. Decorators use the
+[draper gem](https://github.com/drapergem/draper).
+
+### Workers (app/workers)
+Sidekiq workers to handle longer running tasks (to avoid slow requests).
+The workers themselves have barely any code inside. They just materialize any
+models required and then call the required service.
+
+### Jobs (app/jobs)
+Sucker Punch jobs. Sucker punch handles background tasks in a single process
+using asynchronous Ruby. It's good for keeping costs down on heroku.
+I find sidekiq to [generally be overkill](http://brandonhilkert.com/blog/why-i-wrote-the-sucker-punch-gem/)
+for most tasks (email sending for example). Sucker Punch workers are the same as
+Sidekiq workers. Just materialize models and call the correct service
+
+### Services (app/services)
+When the app needs to interact with any third party service then a service
+object is used. They are called either from workers or mediators. They handle
+the details of things like email sending, lookup up social media data,
+importing/syncing contacts, polling IMAP, etc.
+
+### Responses (app/responses)
+These handle responding to the client. They are almost all just simple
+delegators that help me to avoid duplicating code in controllers.
+
+### Repositories (app/repositories)
+Used to access the database. I'm trying to gradually decouple the app completely
+from ActiveRecord. It keeps the queries private instead of leaking storage API
+details into the app.
+
+### Adapters (app/adapters)
+Adapters communicate between specific storage implementations and repositories.
+So far there is only an ActiveRecordAdapter. When I comes time to switch to
+something else, perhaps sequel, then I will just need to define a new adapter
+and plug it into the base repository. Adapters also need to define a Unit Of
+Work in order to be able to roll back groups of changes. With SQL this is just a
+wrapper around a Transaction
+
+### Errors (app/errors)
+These define business specific errors rather than just using the standard ones.
+Also map database specific errors to business ones so that the database can be
+switched out easily.
+
+### Policies (app/policies)
+These handle authorization.
+
 ## Example
 
 Here is an example Rails API controller using hexagonal
@@ -151,70 +215,6 @@ class JobsController < ApplicationController::Base
   end
 end
 ```
-
-## Structure
-
-### Runners (app/runners)
-These are my own creation. They are responsible for model materialization,
-authorization (authentication still happens in the controller) and running
- parameter validation
-
-### Mediators (app/mediators)
-A [Mediator](http://en.wikipedia.org/wiki/Mediator_pattern) is a a design
-pattern encapsulating how a set of objects interact
-The mediators take care of saving/updating/deleting/etc and calling out
-to workers (for longer jobs, like looking up social media data)
-or jobs (for shorter jobs, like sending email)
-
-### Forms (app/forms)
-These contain parameter validation logic.
-
-### Decorators (app/decorators)
-These are used to add an object-oriented presentation layer. Decorators use the
-[draper gem](https://github.com/drapergem/draper).
-
-### Workers (app/workers)
-Sidekiq workers to handle longer running tasks (to avoid slow requests).
-The workers themselves have barely any code inside. They just materialize any
-models required and then call the required service.
-
-### Jobs (app/jobs)
-Sucker Punch jobs. Sucker punch handles background tasks in a single process
-using asynchronous Ruby. It's good for keeping costs down on heroku.
-I find sidekiq to [generally be overkill](http://brandonhilkert.com/blog/why-i-wrote-the-sucker-punch-gem/)
-for most tasks (email sending for example). Sucker Punch workers are the same as
-Sidekiq workers. Just materialize models and call the correct service
-
-### Services (app/services)
-When the app needs to interact with any third party service then a service
-object is used. They are called either from workers or mediators. They handle
-the details of things like email sending, lookup up social media data,
-importing/syncing contacts, polling IMAP, etc.
-
-### Responses (app/responses)
-These handle responding to the client. They are almost all just simple
-delegators that help me to avoid duplicating code in controllers.
-
-### Repositories (app/repositories)
-Used to access the database. I'm trying to gradually decouple the app completely
-from ActiveRecord. It keeps the queries private instead of leaking storage API
-details into the app.
-
-### Adapters (app/adapters)
-Adapters communicate between specific storage implementations and repositories.
-So far there is only an ActiveRecordAdapter. When I comes time to switch to
-something else, perhaps sequel, then I will just need to define a new adapter
-and plug it into the base repository. Adapters also need to define a Unit Of
-Work in order to be able to roll back groups of changes. With SQL this is just a
-wrapper around a Transaction
-
-### Errors (app/errors)
-These define business specific errors rather than just using the standard ones.
-Also map database specific errors to business ones so that the database can be
-switched out easily.
-
-### Policies (app/policies)
-These handle authorization.
 
 ## Supported Rubies
 2.0.x, 2.1.x, JRuby 1.7.x
