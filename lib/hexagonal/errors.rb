@@ -1,0 +1,2 @@
+require_relative 'errors/record_invalid_exception'
+require_relative 'errors/unauthorized_exception'
