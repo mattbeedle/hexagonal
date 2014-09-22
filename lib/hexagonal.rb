@@ -4,6 +4,7 @@ require 'hexagonal/adapters'
 require 'hexagonal/errors'
 require 'hexagonal/mediators'
 require 'hexagonal/repository'
+require 'hexagonal/responses'
 require 'hexagonal/runners'
 
 module Hexagonal
