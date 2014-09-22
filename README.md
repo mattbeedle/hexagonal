@@ -42,6 +42,10 @@ modular, Ruby application. See Structure section below.
 
 ## Usage
 
+When using Rails, the following generators are available. When not using Rails,
+please see the examples folder for how to extend the provided classes
+correctly.
+
 ### Generate a resource
 This will generate a repository, policy, mediators and runners for all CRUD
 actions for a specified resource.
@@ -86,10 +90,28 @@ rails generate hexagonal:decorator [MODEL_NAME]
 
 ## Structure
 
+Here is the basic app structure along with some implementation examples.
+Not all of these objects need to inherited/extended from Hexagonal. Services,
+Jobs and Workers are not planned to be part of the gem.
+
 ### Runners (app/runners)
 These are my own creation. They are responsible for model materialization,
 authorization (authentication still happens in the controller) and running
  parameter validation
+
+```ruby
+class CreateJobRunner < Hexagonal::Runners::CreateRunner
+  private
+
+  def form
+    @form ||= JobForm.new(attributes)
+  end
+
+  def mediator
+    @mediator ||= CreateJobMediator.new(user, form.attributes)
+  end
+end
+```
 
 ### Mediators (app/mediators)
 A [Mediator](http://en.wikipedia.org/wiki/Mediator_pattern) is a a design
@@ -98,17 +120,70 @@ The mediators take care of saving/updating/deleting/etc and calling out
 to workers (for longer jobs, like looking up social media data)
 or jobs (for shorter jobs, like sending email)
 
+```ruby
+class CreateJobMediator < Hexagonal::Mediators::CreateMediator
+  def target
+    @target ||= Job.new(attributes)
+  end
+
+  private
+
+  def default_attributes
+    { created_by_id: user.id, account_id: user.account_id }
+  end
+
+  def repository
+    @repository ||= JobRepository.new
+  end
+end
+```
+
 ### Forms (app/forms)
 These contain parameter validation logic.
+
+```ruby
+class JobForm
+  include Hexagonal::Form
+
+  attribute :title, String
+  attribute :remote_working_allowed, Boolean, default: true
+
+  validates :title, presence: true
+end
+```
 
 ### Decorators (app/decorators)
 These are used to add an object-oriented presentation layer. Decorators use the
 [draper gem](https://github.com/drapergem/draper).
 
+```ruby
+class JobDecorator < Draper::Decorator
+  decorates :job
+
+  delegate_all
+
+  def address
+    [street, city, country].compact.join(', ')
+  end
+end
+```
+
 ### Workers (app/workers)
 Sidekiq workers to handle longer running tasks (to avoid slow requests).
 The workers themselves have barely any code inside. They just materialize any
 models required and then call the required service.
+
+```ruby
+class ContactImportWorker
+  include Sidekiq::Worker
+
+  def perform(user_id)
+    User.find(user_id).tap do |user|
+      ContactImportService.new(user).call
+    end
+  end
+end
+```
 
 ### Jobs (app/jobs)
 Sucker Punch jobs. Sucker punch handles background tasks in a single process
@@ -117,20 +192,56 @@ I find sidekiq to [generally be overkill](http://brandonhilkert.com/blog/why-i-w
 for most tasks (email sending for example). Sucker Punch workers are the same as
 Sidekiq workers. Just materialize models and call the correct service
 
+```ruby
+class SignupConfirmationJob
+  include SuckerPunch::Job
+
+  def perform(user)
+    UserMailer.signup_confirmation(user).deliver
+  end
+end
+```
+
 ### Services (app/services)
 When the app needs to interact with any third party service then a service
 object is used. They are called either from workers or mediators. They handle
 the details of things like email sending, lookup up social media data,
 importing/syncing contacts, polling IMAP, etc.
 
+```ruby
+class ContactImportService < Hexagonal::Service
+  def call
+    # some complex logic to pull contacts from social media
+  end
+end
+```
+
 ### Responses (app/responses)
 These handle responding to the client. They are almost all just simple
 delegators that help me to avoid duplicating code in controllers.
+
+```ruby
+class CreateResponse < SimpleDelegator
+  def created_successfully(object)
+    respond_with object
+  end
+
+  def creation_failed(object)
+    render :errors, object.errors.as_json
+  end
+end
+```
 
 ### Repositories (app/repositories)
 Used to access the database. I'm trying to gradually decouple the app completely
 from ActiveRecord. It keeps the queries private instead of leaking storage API
 details into the app.
+
+```ruby
+class JobRepository
+  include Hexagonal::Repository
+end
+```
 
 ### Adapters (app/adapters)
 Adapters communicate between specific storage implementations and repositories.
@@ -138,7 +249,7 @@ So far there is only an ActiveRecordAdapter. When I comes time to switch to
 something else, perhaps sequel, then I will just need to define a new adapter
 and plug it into the base repository. Adapters also need to define a Unit Of
 Work in order to be able to roll back groups of changes. With SQL this is just a
-wrapper around a Transaction
+wrapper around a Transaction.
 
 ### Errors (app/errors)
 These define business specific errors rather than just using the standard ones.
@@ -147,6 +258,23 @@ switched out easily.
 
 ### Policies (app/policies)
 These handle authorization.
+
+```ruby
+class JobPolicy
+  def initialize(user, job)
+    @user = user
+    @job = job
+  end
+
+  def delete?
+    job.created_by == user
+  end
+
+  private
+
+  attr_reader :user, :job
+end
+```
 
 ## Example
 
