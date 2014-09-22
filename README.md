@@ -114,7 +114,7 @@ end
 ```
 
 ### Mediators (app/mediators)
-A [Mediator](http://en.wikipedia.org/wiki/Mediator_pattern) is a a design
+A [Mediator](http://en.wikipedia.org/wiki/Mediator_pattern) is a design
 pattern encapsulating how a set of objects interact
 The mediators take care of saving/updating/deleting/etc and calling out
 to workers (for longer jobs, like looking up social media data)
@@ -209,7 +209,11 @@ the details of things like email sending, lookup up social media data,
 importing/syncing contacts, polling IMAP, etc.
 
 ```ruby
-class ContactImportService < Hexagonal::Service
+class ContactImportService
+  def initialize(user)
+    @user = user
+  end
+
   def call
     # some complex logic to pull contacts from social media
   end
@@ -240,6 +244,10 @@ details into the app.
 ```ruby
 class JobRepository
   include Hexagonal::Repository
+
+  def find_by_creator_id(creator_id)
+    adapter.where(creator_id: creator_id)
+  end
 end
 ```
 
