@@ -84,6 +84,74 @@ rails generate hexagonal:job [JOB_NAME]
 rails generate hexagonal:decorator [MODEL_NAME]
 ```
 
+## Example
+
+Here is an example Rails API controller using hexagonal
+```ruby
+class JobsController < ApplicationController::Base
+  before_filter :authenticate_user!
+
+  def index
+    filter_runner.run
+  end
+
+  def show
+    find_runner.run
+  end
+
+  def create
+    create_runner.run
+  end
+
+  def update
+    update_runner.run
+  end
+
+  def destroy
+    delete_runner.run
+  end
+
+  private
+
+  def find_runner
+    FindJobRunner.new(find_one_response, current_user, params[:id])
+  end
+
+  def find_one_response
+    FindOneResponse.new(self)
+  end
+
+  def filter_runner
+    FilterJobsRunner.new(find_all_response, current_user, params)
+  end
+
+  def create_runner
+    CreateJobRunner.new(create_response, current_user, params[:job])
+  end
+
+  def create_response
+    CreateResponse.new(self)
+  end
+
+  def update_runner
+    UpdateJobRunner
+      .new(update_response, current_user, params[:id], params[:job])
+  end
+
+  def update_response
+    UpdateResponse.new(self)
+  end
+
+  def delete_runner
+    DeleteRunner.new(delete_response, current_user, params[:id])
+  end
+
+  def delete_response
+    DeleteResponse.new(self)
+  end
+end
+```
+
 ## Structure
 
 ### Runners (app/runners)
